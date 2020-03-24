@@ -1,0 +1,14 @@
+# Datatypes (KEYWORD1)
+CommandParser KEYWORD1
+Argument      KEYWORD1
+
+# Methods and Functions (KEYWORD2)
+registerCommand KEYWORD2
+processCommand  KEYWORD2
+
+# Constants (LITERAL1)
+MAX_COMMANDS            LITERAL1
+MAX_COMMAND_ARGS        LITERAL1
+MAX_COMMAND_NAME_LENGTH LITERAL1
+MAX_COMMAND_ARG_SIZE    LITERAL1
+MAX_RESPONSE_SIZE       LITERAL1
