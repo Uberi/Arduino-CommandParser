@@ -1,19 +1,19 @@
 CommandParser
 =============
 
-An Arduino library for parsing commands of the form "COMMAND_NAME ARG1 ARG2 ARG3 ...".
+An Arduino library for parsing commands of the form `COMMAND_NAME ARG1 ARG2 ARG3 ...`.
 
 Features:
 
-* No dynamic memory allocation.
-* Compile-time-configurable resource limits.
-* Strongly typed arguments with strict input validation.
-* Friendly error messages for invalid inputs.
-* Support for escape sequences in string arguments (e.g., `SOME_COMMAND "\"\x41\r\n\t\\"`).
+* **No dynamic memory allocation**.
+* Compile-time-**configurable resource limits**.
+* Strongly typed arguments with **strict input validation**.
+* Friendly **error messages** for invalid inputs.
+* Support for **escape sequences** in string arguments (e.g., `SOME_COMMAND "\"\x41\r\n\t\\"`).
 
 This library works with all Arduino-compatible boards.
 
-This library has a higher RAM footprint compared to similar libraries, because it fully parses command arguments instead of leaving them as strings. An instance of `CommandParser<>` in RAM is 456 bytes on a 32-bit Arduino Nano 33 BLE.
+This library has a higher RAM footprint compared to similar libraries, because it fully parses each argument instead of leaving them as strings. An instance of `CommandParser<>` in RAM is 456 bytes on a 32-bit Arduino Nano 33 BLE.
 
 Quickstart
 ----------
@@ -21,7 +21,7 @@ Quickstart
 Example Arduino sketch:
 
 ```cpp
-#include <CommandParser>
+#include <CommandParser.h>
 
 typedef CommandParser<> MyCommandParser;
 
@@ -40,20 +40,24 @@ void setup() {
   while (!Serial);
 
   parser.registerCommand("TEST", "sdiu", &cmd_test);
-  Serial.println("TEST <string> <double> <int64> <uint64> command registered");
+  Serial.println("registered command: TEST <string> <double> <int64> <uint64>");
+  Serial.println("example: TEST \"\\x41bc\\ndef\" -1.234e5 -123 123");
 }
 
 void loop() {
-  Serial.println("Enter a command:");
-  char line[128];
-  size_t lineLength = Serial.readBytesUntil('\n', line, 127);
-  line[lineLength] = '\0';
+  if (Serial.available()) {
+    char line[128];
+    size_t lineLength = Serial.readBytesUntil('\n', line, 127);
+    line[lineLength] = '\0';
 
-  parser.processCommand(line);
+    char response[MyCommandParser::MAX_RESPONSE_SIZE];
+    parser.processCommand(line, response);
+    Serial.println(response);
+  }
 }
 ```
 
-See examples:
+More examples:
 
 * [Parsing commands over Serial](examples/SerialCommands/SerialCommands.ino)
 * [Customizing resource limits](examples/CustomizeParameters/CustomizeParameters.ino)
@@ -64,14 +68,14 @@ Comparison
 Other libraries for parsing commands:
 
 * [CmdArduino](https://github.com/joshmarinacci/CmdArduino):
-    * CmdArduino has hardcoded size limits for arguments/commands, only supports string arguments, and doesn't support string escape sequences.
+    * CmdArduino has hardcoded size limits for arguments/commands, only supports string arguments, and doesn't support string escape sequences. It works well as the most minimal option.
     * CommandParser has configurable size limits, supports multiple argument types, and supports string escape sequences.
 * [CmdParser](https://github.com/pvizeli/CmdParser):
-    * CmdParser's command syntax is more configurable, with options such as setting the separator character, named parameters, and quoting behaviour.
+    * CmdParser's command syntax is more configurable, with options such as setting the separator character, named parameters, and quoting behaviour. It works well as the most configurable option.
     * CommandParser's command syntax is not configurable, but additionally supports escape sequences in string arguments, non-string arguments such as doubles and integers that are automatically parsed/validated, and empty string arguments.
     * Also, CommandParser checks all inputs for validity (including syntax errors when invalid input is given), and doesn't assume the use of Serial.
 * [SerialCommand](https://github.com/kroimon/Arduino-SerialCommand):
-    * SerialCommand only accepts input from Serial, only supports string arguments, doesn't validate that the number of arguments, and doesn't support strings that contain the argument delimiter or any escape sequences.
+    * SerialCommand only accepts input from Serial, only supports string arguments, doesn't validate that the number of arguments, and doesn't support strings that contain the argument delimiter or any escape sequences. It works well for simpler Serial-specific use cases.
     * CommandParser accepts input from any char array, supports multiple argument types, validates that all arguments parse correctly and that the correct syntax is used, and supports escape sequences in strings.
 
 CommandParser is likely the best choice when you need strict input validation, error checking, and configurable resource usage.
