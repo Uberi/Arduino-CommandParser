@@ -7,8 +7,8 @@ Features:
 
 * **No dynamic memory allocation**.
 * Compile-time-**configurable resource limits**.
-* Strongly typed arguments with **strict input validation**.
-* Friendly **error messages** for invalid inputs.
+* Strongly typed arguments with **strict input validation** (including integer overflow detection!).
+* Friendly **error messages** for invalid inputs (e.g., `parse error: invalid double for arg 2` if the command's second argument cannot be parsed as a double).
 * Support for **escape sequences** in string arguments (e.g., `SOME_COMMAND "\"\x41\r\n\t\\"`).
 
 This library works with all Arduino-compatible boards.
@@ -18,7 +18,7 @@ This library has a higher RAM footprint compared to similar libraries, because i
 Quickstart
 ----------
 
-Example Arduino sketch:
+Search for "CommandParser" in the Arduino Library Manager, and install it. Now you can try a quick example sketch:
 
 ```cpp
 #include <CommandParser.h>
@@ -61,6 +61,38 @@ More examples:
 
 * [Parsing commands over Serial](examples/SerialCommands/SerialCommands.ino)
 * [Customizing resource limits](examples/CustomizeParameters/CustomizeParameters.ino)
+
+Grammar
+-------
+
+Commands are null-terminated strings that largely follow this PEG grammar:
+
+```
+COMMAND <- COMMAND_NAME (' '+ (ARG_STRING / ARG_DOUBLE / ARG_INT64 / ARG_UINT64))* ' '*
+COMMAND_NAME <- (!' ')+
+ARG_STRING <- ('"' STRING_CHAR_QUOTED* '"') / (STRING_CHAR_UNQUOTED+)
+ARG_DOUBLE <- SIGN? ((DEC+ '.' DEC*) / ('.' DEC+)) (('e' / 'E') SIGN? DEC+)?
+ARG_INT64 <- SIGN? ARG_UINT64
+ARG_UINT64 <- ('0x' HEX+) / ('0o' OCT+) / ('0b' BIN+) / DEC+
+STRING_CHAR_QUOTED <- STRING_CHAR_ESCAPE / (!'"')
+STRING_CHAR_UNQUOTED <- STRING_CHAR_ESCAPE / (!' ')
+STRING_CHAR_ESCAPE <- ( '\\x' HEX HEX ) / '\\n' / '\\r' / '\\t' / '\\"' / '\\\\'
+HEX <- [0-9a-fA-F]
+DEC <- [0-9]
+OCT <- [0-7]
+BIN <- [0-1]
+SIGN <- '+' / '-'
+```
+
+This grammar is a superset of what the parser will actually accept, since the `ARG_STRING / ARG_DOUBLE / ARG_INT64 / ARG_UINT64` choice is predetermined when `COMMAND_NAME` is registered (i.e., a given command always accepts the same number and types of arguments). Additionally, there are other limits (string arguments that are longer than `COMMAND_ARG_SIZE`, int64 arguments that would underflow/overflow a 64-bit signed integer, and so on) that further restrict what inputs are accepted.
+
+Here are some examples of strings that match the `COMMAND` rule in the above grammar:
+
+* `test_command "Hello, \"World\"! \\\x31\x32\x33"` where `test_command` is registered with arg types `s`: one string argument with value `Hello, "World"! \123`.
+* `! yes no` where `!` is registered with arg types `ss`: two string arguments, one with value `yes` and the other `no`.
+* `ABC 0.1 +.1 -123 0. 0 12.3e-1 1E10` where `ABC` is registered with arg types `dddddd`: six double arguments with values `0.1`, `0.1`, `-123`, `0`, `0`, `1.23`, `10000000000`.
+* `SomeCommand 0 +0x1F 0b101 0o77 -26` where `SomeCommand` is registered with arg types `iiiii`: five int64 arguments with values `0`, `31`, `5`, `63`, `-26`.
+* `SomeCommand 0 0x1F 0b101 0o77 26` where `SomeCommand` is registered with arg types `uuuuu`: five uint64 arguments with values `0`, `31`, `5`, `63`, `26`.
 
 Comparison
 ----------

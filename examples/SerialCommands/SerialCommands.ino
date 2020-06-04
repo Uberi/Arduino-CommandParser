@@ -7,8 +7,8 @@ MyCommandParser parser;
 void cmd_test(MyCommandParser::Argument *args, char *response) {
   Serial.print("string: "); Serial.println(args[0].asString);
   Serial.print("double: "); Serial.println(args[1].asDouble);
-  Serial.print("int64: "); Serial.println(args[2].asInt64);
-  Serial.print("uint64: "); Serial.println(args[3].asUInt64);
+  Serial.print("int64: "); Serial.println((int32_t)args[2].asInt64); // NOTE: on older AVR-based boards, Serial doesn't support printing 64-bit values, so we'll cast it down to 32-bit
+  Serial.print("uint64: "); Serial.println((uint32_t)args[3].asUInt64); // NOTE: on older AVR-based boards, Serial doesn't support printing 64-bit values, so we'll cast it down to 32-bit
   strlcpy(response, "success", MyCommandParser::MAX_RESPONSE_SIZE);
 }
 

@@ -14,6 +14,7 @@ int positionX = 0, positionY = 0;
 void cmd_move(MyCommandParser::Argument *args, char *response) {
   positionX = args[0].asInt64;
   positionY = args[1].asInt64;
+  Serial.print("MOVING "); Serial.print(args[0].asInt64); Serial.print(" "); Serial.println(args[1].asInt64);
   snprintf(response, MyCommandParser::MAX_RESPONSE_SIZE, "moved to %d, %d", positionX, positionY);
 }
 
@@ -24,7 +25,7 @@ void cmd_jump(MyCommandParser::Argument *args, char *response) {
 
 void cmd_say(MyCommandParser::Argument *args, char *response) {
   Serial.print("SAYING "); Serial.println(args[0].asString);
-  snprintf(response, MyCommandParser::MAX_RESPONSE_SIZE, "used %s at %d, %d", args[0].asString, positionX, positionY);
+  snprintf(response, MyCommandParser::MAX_RESPONSE_SIZE, "said %s at %d, %d", args[0].asString, positionX, positionY);
 }
 
 void setup() {

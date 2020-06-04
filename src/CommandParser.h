@@ -13,7 +13,63 @@
 #ifndef __COMMAND_PARSER_H__
 #define __COMMAND_PARSER_H__
 
+#include <limits.h>
+
+/*
 #include <cstring>
+size_t strlcpy(char *dst, const char *src, size_t size) {
+    *dst = '\0';
+    strncat(dst, src, size - 1);
+    return strlen(dst);
+}
+*/
+
+// avr-libc lacks strtoll and strtoull (see https://www.nongnu.org/avr-libc/user-manual/group__avr__stdlib.html), so we'll implement our own to be compatible with AVR boards such as the Arduino Uno
+// typically you would use this like: `int64_t result; size_t bytesRead = strToInt<int64_t>("-0x123", &result, std::numeric_limits<int64_t>::min(), std::numeric_limits<int64_t>::max())`
+// if an error occurs during parsing, `bytesRead` will be 0 and `result` will be an arbitrary value
+template<typename T> size_t strToInt(const char* buf, T *value, T min_value, T max_value) {
+    size_t position = 0;
+
+    // parse sign if necessary
+    bool isNegative = false;
+    if (min_value < 0 && buf[position] == '+' || buf[position] == '-') {
+        isNegative = buf[position] == '-';
+        position ++;
+    }
+
+    // parse base identifier if necessary
+    int base = 10;
+    if (buf[position] == '0' && buf[position + 1] == 'b') {
+        base = 2;
+        position += 2;
+    } else if (buf[position] == '0' && buf[position + 1] == 'o') {
+        base = 8;
+        position += 2;
+    } else if (buf[position] == '0' && buf[position + 1] == 'x') {
+        base = 16;
+        position += 2;
+    }
+
+    int digit = -1;
+    *value = 0;
+    while (true) {
+        // obtain the next digit of the number
+        if      (base >= 2  && '0' <= buf[position] && buf[position] <= '1') { digit = buf[position] - '0'; }
+        else if (base >= 8  && '2' <= buf[position] && buf[position] <= '7') { digit = (buf[position] - '2') + 2; }
+        else if (base >= 10 && '8' <= buf[position] && buf[position] <= '9') { digit = (buf[position] - '8') + 8; }
+        else if (base >= 16 && 'a' <= buf[position] && buf[position] <= 'f') { digit = (buf[position] - 'a') + 10; }
+        else if (base >= 16 && 'A' <= buf[position] && buf[position] <= 'F') { digit = (buf[position] - 'A') + 10; }
+        else { break; }
+
+        if (*value < min_value / base || *value > max_value / base) { return 0; } // integer multiplication underflow/overflow, fail gracefully
+        *value *= base;
+        if (isNegative ? *value < min_value + digit : *value > max_value - digit) { return 0; } // integer subtraction-underflow/addition-overflow, fail gracefully
+        *value += digit;
+
+        position ++;
+    }
+    return digit == -1 ? 0 : position; // ensure that there is at least one digit
+}
 
 template<size_t COMMANDS = 16, size_t COMMAND_ARGS = 4, size_t COMMAND_NAME_LENGTH = 10, size_t COMMAND_ARG_SIZE = 32, size_t RESPONSE_SIZE = 64>
 class CommandParser {
@@ -41,45 +97,52 @@ class CommandParser {
         struct Command commandDefinitions[MAX_COMMANDS];
         size_t numCommands = 0;
 
-        bool parseString(const char *buf, char *output, size_t *readCount) {
-            size_t pos = 0;
-
-            if (buf[0] != '"') { return false; }
-            pos ++; // move past the opening quote
+        size_t parseString(const char *buf, char *output) {
+            size_t readCount = 0;
+            bool isQuoted = buf[0] == '"'; // whether the string is quoted or just a plain word
+            if (isQuoted) {
+                readCount ++; // move past the opening quote
+            }
 
             size_t i = 0;
-            for (; i < MAX_COMMAND_ARG_SIZE && buf[pos] != '"' && buf[pos] != '\0'; i ++) { // loop through each character of the string literal
-                if (buf[pos] == '\\') { // start of the escape sequence
-                    pos ++; // move past the backslash
-                    switch (buf[pos]) { // check what kind of escape sequence it is, turn it into the correct character
-                        case 'n': output[i] = '\n'; pos ++; break;
-                        case 'r': output[i] = '\r'; pos ++; break;
-                        case 't': output[i] = '\t'; pos ++; break;
-                        case '"': output[i] = '"'; pos ++; break;
-                        case '\\': output[i] = '\\'; pos ++; break;
+            for (; i < MAX_COMMAND_ARG_SIZE && buf[readCount] != '\0'; i ++) { // loop through each character of the string literal
+                if (isQuoted ? buf[readCount] == '"' : buf[readCount] == ' ') {
+                    break;
+                }
+                if (buf[readCount] == '\\') { // start of the escape sequence
+                    readCount ++; // move past the backslash
+                    switch (buf[readCount]) { // check what kind of escape sequence it is, turn it into the correct character
+                        case 'n': output[i] = '\n'; readCount ++; break;
+                        case 'r': output[i] = '\r'; readCount ++; break;
+                        case 't': output[i] = '\t'; readCount ++; break;
+                        case '"': output[i] = '"'; readCount ++; break;
+                        case '\\': output[i] = '\\'; readCount ++; break;
                         case 'x': { // hex escape, of the form \xNN where NN is a byte in hex
-                            pos ++; // move past the "x" character
-                            char hexCode[3] = {buf[pos], buf[pos] == '\0' ? '\0' : buf[pos + 1], '\0'}; // copy the hex code into its own string
-                            char *afterHexCode; output[i] = (char)strtol(hexCode, &afterHexCode, 16);
-                            if (hexCode == afterHexCode || afterHexCode[0] != '\0') { return false; } // invalid escape sequence, number wasn't fully parsed
-                            pos += afterHexCode - hexCode;
+                            readCount ++; // move past the "x" character
+                            output[i] = 0;
+                            for (size_t j = 0; j < 2; j ++, readCount ++) {
+                                if      ('0' <= buf[readCount] && buf[readCount] <= '9') { output[i] = output[i] * 16 + (buf[readCount] - '0'); }
+                                else if ('a' <= buf[readCount] && buf[readCount] <= 'f') { output[i] = output[i] * 16 + (buf[readCount] - 'a') + 10; }
+                                else if ('A' <= buf[readCount] && buf[readCount] <= 'F') { output[i] = output[i] * 16 + (buf[readCount] - 'A') + 10; }
+                                else { return 0; }
+                            }
                             break;
                         }
                         default: // unknown escape sequence
-                            return false;
+                            return 0;
                     }
                 } else { // non-escaped character
-                    output[i] = buf[pos];
-                    pos ++;
+                    output[i] = buf[readCount];
+                    readCount ++;
                 }
             }
+            if (isQuoted) {
+                if (buf[readCount] != '"') { return 0; }
+                readCount ++; // move past the closing quote
+            }
+
             output[i] = '\0';
-
-            if (buf[pos] != '"') { return false; }
-            pos ++; // move past the ending quote
-
-            *readCount = pos;
-            return true;
+            return readCount;
         }
     public:
         bool registerCommand(const char *name, const char *argTypes, void (*callback)(union Argument *args, char *response)) {
@@ -149,28 +212,26 @@ class CommandParser {
                         break;
                     }
                     case 'u': { // uint64_t argument
-                        char *after;
-                        commandArgs[i].asUInt64 = strtoull(command, &after, 0);
-                        if (after == command || (*after != ' ' && *after != '\0')) {
+                        size_t bytesRead = strToInt<uint64_t>(command, &commandArgs[i].asUInt64, 0, ULONG_LONG_MAX);
+                        if (bytesRead == 0 || (command[bytesRead] != ' ' && command[bytesRead] != '\0')) {
                             snprintf(response, MAX_RESPONSE_SIZE, "parse error: invalid uint64_t for arg %d", i + 1);
                             return false;
                         }
-                        command = after;
+                        command += bytesRead;
                         break;
                     }
                     case 'i': { // int64_t argument
-                        char *after;
-                        commandArgs[i].asInt64 = strtoll(command, &after, 0);
-                        if (after == command || (*after != ' ' && *after != '\0')) {
+                        size_t bytesRead = strToInt<int64_t>(command, &commandArgs[i].asInt64, LONG_LONG_MIN, LONG_LONG_MAX);
+                        if (bytesRead == 0 || (command[bytesRead] != ' ' && command[bytesRead] != '\0')) {
                             snprintf(response, MAX_RESPONSE_SIZE, "parse error: invalid int64_t for arg %d", i + 1);
                             return false;
                         }
-                        command = after;
+                        command += bytesRead;
                         break;
                     }
                     case 's': {
-                        size_t readCount = 0;
-                        if (!parseString(command, commandArgs[i].asString, &readCount)) {
+                        size_t readCount = parseString(command, commandArgs[i].asString);
+                        if (readCount == 0) {
                             snprintf(response, MAX_RESPONSE_SIZE, "parse error: invalid string for arg %d", i + 1);
                             return false;
                         }
