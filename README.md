@@ -18,7 +18,7 @@ This library has a higher RAM footprint compared to similar libraries, because i
 Quickstart
 ----------
 
-Search for "CommandParser" in the Arduino Library Manager, and install it. Now you can try a quick example sketch:
+Search for "CommandParser" in the Arduino Library Manager, and install it. Now you can try a quick example sketch that accepts commands over serial:
 
 ```cpp
 #include <CommandParser.h>
@@ -65,7 +65,7 @@ More examples:
 Grammar
 -------
 
-Commands are null-terminated strings that largely follow this PEG grammar:
+Commands are null-terminated strings that largely follow this [PEG grammar](https://en.wikipedia.org/wiki/Parsing_expression_grammar):
 
 ```
 COMMAND <- COMMAND_NAME (' '+ (ARG_STRING / ARG_DOUBLE / ARG_INT64 / ARG_UINT64))* ' '*
