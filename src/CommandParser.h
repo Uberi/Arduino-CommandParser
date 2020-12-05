@@ -32,7 +32,7 @@ template<typename T> size_t strToInt(const char* buf, T *value, T min_value, T m
 
     // parse sign if necessary
     bool isNegative = false;
-    if (min_value < 0 && buf[position] == '+' || buf[position] == '-') {
+    if ((min_value < 0 && buf[position] == '+') || buf[position] == '-') {
         isNegative = buf[position] == '-';
         position ++;
     }
