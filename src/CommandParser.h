@@ -24,8 +24,11 @@ size_t strlcpy(char *dst, const char *src, size_t size) {
 }
 */
 
-// avr-libc lacks strtoll and strtoull (see https://www.nongnu.org/avr-libc/user-manual/group__avr__stdlib.html), so we'll implement our own to be compatible with AVR boards such as the Arduino Uno
-// typically you would use this like: `int64_t result; size_t bytesRead = strToInt<int64_t>("-0x123", &result, std::numeric_limits<int64_t>::min(), std::numeric_limits<int64_t>::max())`
+// avr-libc lacks strtoll and strtoull (see https://www.nongnu.org/avr-libc/user-manual/group__avr__stdlib.html), 
+// so we'll implement our own to be compatible with AVR boards such as the Arduino Uno
+// typically you would use this like: 
+// `int64_t result; size_t bytesRead = strToInt<int64_t>("-0x123", &result, std::numeric_limits<int64_t>::min(), 
+//                                                        std::numeric_limits<int64_t>::max())`
 // if an error occurs during parsing, `bytesRead` will be 0 and `result` will be an arbitrary value
 template<typename T> size_t strToInt(const char* buf, T *value, T min_value, T max_value) {
     size_t position = 0;
@@ -68,6 +71,7 @@ template<typename T> size_t strToInt(const char* buf, T *value, T min_value, T m
 
         position ++;
     }
+    if(isNegative) *value *= -1;
     return digit == -1 ? 0 : position; // ensure that there is at least one digit
 }
 
@@ -212,7 +216,13 @@ class CommandParser {
                         break;
                     }
                     case 'u': { // uint64_t argument
+#if defined ULONG_LONG_MAX  // GNU style
                         size_t bytesRead = strToInt<uint64_t>(command, &commandArgs[i].asUInt64, 0, ULONG_LONG_MAX);
+#elif defined ULLONG_MAX    // ISO C style
+                        size_t bytesRead = strToInt<uint64_t>(command, &commandArgs[i].asUInt64, 0, ULLONG_MAX);
+#else
+                      #error "ULONG_LONG_MAX not defined"
+#endif
                         if (bytesRead == 0 || (command[bytesRead] != ' ' && command[bytesRead] != '\0')) {
                             snprintf(response, MAX_RESPONSE_SIZE, "parse error: invalid uint64_t for arg %d", i + 1);
                             return false;
@@ -221,7 +231,13 @@ class CommandParser {
                         break;
                     }
                     case 'i': { // int64_t argument
+#if defined LONG_LONG_MAX  // GNU style
                         size_t bytesRead = strToInt<int64_t>(command, &commandArgs[i].asInt64, LONG_LONG_MIN, LONG_LONG_MAX);
+#elif defined LLONG_MAX    // ISO C style
+                        size_t bytesRead = strToInt<int64_t>(command, &commandArgs[i].asInt64, LLONG_MIN, LLONG_MAX);
+#else
+                      #error "LONG_LONG_MAX not defined"
+#endif
                         if (bytesRead == 0 || (command[bytesRead] != ' ' && command[bytesRead] != '\0')) {
                             snprintf(response, MAX_RESPONSE_SIZE, "parse error: invalid int64_t for arg %d", i + 1);
                             return false;
