@@ -35,7 +35,7 @@ template<typename T> size_t strToInt(const char* buf, T *value, T min_value, T m
 
     // parse sign if necessary
     bool isNegative = false;
-    if (min_value < 0 && buf[position] == '+' || buf[position] == '-') {
+    if ((min_value < 0 && buf[position] == '+') || buf[position] == '-') {
         isNegative = buf[position] == '-';
         position ++;
     }
@@ -75,13 +75,14 @@ template<typename T> size_t strToInt(const char* buf, T *value, T min_value, T m
     return digit == -1 ? 0 : position; // ensure that there is at least one digit
 }
 
-template<size_t COMMANDS = 16, size_t COMMAND_ARGS = 4, size_t COMMAND_NAME_LENGTH = 10, size_t COMMAND_ARG_SIZE = 32, size_t RESPONSE_SIZE = 64>
+template<size_t COMMANDS = 16, size_t COMMAND_ARGS = 4, size_t COMMAND_NAME_LENGTH = 10, size_t COMMAND_ARG_SIZE = 32, size_t COMMAND_HLP_LENGTH = 160, size_t RESPONSE_SIZE = 64>
 class CommandParser {
     public:
         static const size_t MAX_COMMANDS = COMMANDS;
         static const size_t MAX_COMMAND_ARGS = COMMAND_ARGS;
         static const size_t MAX_COMMAND_NAME_LENGTH = COMMAND_NAME_LENGTH;
         static const size_t MAX_COMMAND_ARG_SIZE = COMMAND_ARG_SIZE;
+        static const size_t MAX_COMMAND_HLP_LENGTH = COMMAND_HLP_LENGTH;
         static const size_t MAX_RESPONSE_SIZE = RESPONSE_SIZE;
 
         union Argument {
@@ -94,6 +95,7 @@ class CommandParser {
         struct Command {
             char name[MAX_COMMAND_NAME_LENGTH + 1];
             char argTypes[MAX_COMMAND_ARGS + 1];
+            char help[MAX_COMMAND_HLP_LENGTH + 1];
             void (*callback)(union Argument *args, char *response);
         };
 
@@ -148,11 +150,42 @@ class CommandParser {
             output[i] = '\0';
             return readCount;
         }
+    private:
+        void cmd_help() {
+          for (size_t i = 0; i < numCommands; i ++) {
+            printf("%s ", commandDefinitions[i].name);
+            for (size_t j = 0; commandDefinitions[i].argTypes[j] != '\0'; j++) {
+              switch(commandDefinitions[i].argTypes[j]) {
+                case 'd':
+                  printf("<double> ");
+                  break;
+                case 'i':
+                  printf("<int64> ");
+                  break;
+                case 's':
+                  printf("<string> ");
+                  break;
+                case 'u':
+                  printf("<uint64> ");
+                  break;
+              }
+            }
+            if(strlen(commandDefinitions[i].help)>0)
+              printf("\n%s\n\n", commandDefinitions[i].help);
+            else
+              printf("\n");
+          }
+        }
     public:
         bool registerCommand(const char *name, const char *argTypes, void (*callback)(union Argument *args, char *response)) {
+          return registerCommand(name, argTypes, nullptr, callback);
+        }
+
+        bool registerCommand(const char *name, const char *argTypes, const char *help, void (*callback)(union Argument *args, char *response)) {
             if (numCommands == MAX_COMMANDS) { return false; }
             if (strlen(name) > MAX_COMMAND_NAME_LENGTH) { return false; }
             if (strlen(argTypes) > MAX_COMMAND_ARGS) { return false; }
+            if (strlen(help) > MAX_COMMAND_HLP_LENGTH) { return false; }
             if (callback == nullptr) { return false; }
             for (size_t i = 0; argTypes[i] != '\0'; i ++) {
                 switch (argTypes[i]) {
@@ -168,6 +201,7 @@ class CommandParser {
 
             strlcpy(commandDefinitions[numCommands].name, name, MAX_COMMAND_NAME_LENGTH + 1);
             strlcpy(commandDefinitions[numCommands].argTypes, argTypes, MAX_COMMAND_ARGS + 1);
+            strlcpy(commandDefinitions[numCommands].help, help, MAX_COMMAND_HLP_LENGTH + 1);
             commandDefinitions[numCommands].callback = callback;
             numCommands ++;
             return true;
@@ -176,6 +210,8 @@ class CommandParser {
         bool processCommand(const char *command, char *response) {
             // retrieve the command name
             char name[MAX_COMMAND_NAME_LENGTH + 1];
+            char emptyArgs[]= {'\0'};
+            bool bHelpCmd = false;
             size_t i = 0;
             for (; i < MAX_COMMAND_NAME_LENGTH && *command != ' ' && *command != '\0'; i ++, command ++) { name[i] = *command; }
             name[i] = '\0';
@@ -183,14 +219,20 @@ class CommandParser {
             // look up the command argument types and callback
             char *argTypes = nullptr;
             void (*callback)(union Argument *, char *) = nullptr;
-            for (size_t i = 0; i < numCommands; i ++) {
-                if (strcmp(commandDefinitions[i].name, name) == 0) {
-                    argTypes = commandDefinitions[i].argTypes;
-                    callback = commandDefinitions[i].callback;
-                    break;
-                }
+            if(strcmp("help", name) == 0) {
+              bHelpCmd = true;
+              argTypes = emptyArgs;
             }
-            if (argTypes == nullptr) {
+            else {
+              for (size_t i = 0; i < numCommands; i ++) {
+                  if (strcmp(commandDefinitions[i].name, name) == 0) {
+                      argTypes = commandDefinitions[i].argTypes;
+                      callback = commandDefinitions[i].callback;
+                      break;
+                  }
+              }
+            }
+            if (argTypes == nullptr && !bHelpCmd) {
                 snprintf(response, MAX_RESPONSE_SIZE, "parse error: unknown command name %s", name);
                 return false;
             }
@@ -273,7 +315,10 @@ class CommandParser {
             response[0] = '\0';
 
             // invoke the command
-            (*callback)(commandArgs, response);
+            if(!bHelpCmd)
+              (*callback)(commandArgs, response);
+            else
+              cmd_help();
             return true;
         }
 };

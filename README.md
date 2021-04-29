@@ -109,7 +109,8 @@ int main() {
 
   printf("Start\n");
 
-  parser.registerCommand("TEST", "sdiu", &cmd_test);
+  // parser.registerCommand("TEST", "sdiu", &cmd_test); // without help text
+  parser.registerCommand("TEST", "sdiu", "example: TEST \"def\" -1.234e5 -123 123\n", &cmd_test); // with additional help text
 
   rser.attach(&serialCb, SerialBase::RxIrq);
 
