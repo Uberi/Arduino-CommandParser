@@ -58,7 +58,7 @@ void loop() {
 ```
 
 And here an Mbed OS example (tested with v6.9.0)
-```
+```cpp
 #include "mbed.h"
 #include "CommandParser.h"
 
